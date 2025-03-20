@@ -9,10 +9,16 @@ import (
 	karmabotui "github.com/kamaln7/karmabot/ui"
 	"github.com/kamaln7/karmabot/ui/blankui"
 	"github.com/kamaln7/karmabot/ui/webui"
-
+	//"log"
 	"github.com/aybabtme/log"
 	"github.com/kamaln7/envy"
-	"github.com/nlopes/slack"
+	//"github.com/nlopes/slack"
+
+	"github.com/joho/godotenv"
+    "github.com/slack-go/slack"
+    //"github.com/slack-go/slack/slackevents"
+    "github.com/slack-go/slack/socketmode"
+	"os"
 )
 
 // cli flags
@@ -99,18 +105,33 @@ func main() {
 
 	// slack
 
-	if *token == "" {
-		ll.Fatal("please pass the slack RTM token (see `karmabot -h` for help)")
-	}
+	// if *token == "" {
+	// 	ll.Fatal("please pass the slack RTM token (see `karmabot -h` for help)")
+	// }
 
 	//TODO: figure out a way to fix this
 	//our current logging library does not implement
 	//log.Logger
 	//slack.SetLogger(*ll)
-	sc := slack.New(*token, slack.OptionDebug(*debug)).NewRTM()
-	go sc.ManageConnection()
+	// sc := slack.New(*token, slack.OptionDebug(*debug)).NewRTM()
+	// go sc.ManageConnection()
 
 	// karmabot
+
+	// Adding new code here
+    godotenv.Load(".env")
+ 
+    token := os.Getenv("SLACK_AUTH_TOKEN")
+    appToken := os.Getenv("SLACK_APP_TOKEN")
+ 
+    client := slack.New(token, slack.OptionDebug(true), slack.OptionAppLevelToken(appToken))
+ 
+    socketClient := socketmode.New(
+        client,
+        socketmode.OptionDebug(true),
+   //     socketmode.OptionLog(log.New(os.Stdout, "socketmode: ", log.Lshortfile|log.LstdFlags)),
+    )
+ 
 
 	var ui karmabotui.Provider
 	if *webuipath != "" && *webuilistenaddr != "" {
@@ -133,8 +154,11 @@ func main() {
 	}
 	go ui.Listen()
 
-	bot := karmabot.New(&karmabot.Config{
-		Slack:            &karmabot.SlackChatService{*sc},
+	bot := karmabot.NewBot(&karmabot.Config{
+		Slack: &karmabot.NewSlackChatService{
+			Client: *socketClient,
+			API: client,
+		},
 		UI:               ui,
 		Debug:            *debug,
 		MaxPoints:        *maxpoints,
@@ -149,5 +173,24 @@ func main() {
 		ReplyType:        *replytype,
 	})
 
-	bot.Listen()
+	go bot.Listen()
+
+	// bot := karmabot.New(&karmabot.Config{
+	// 	Slack:            &karmabot.SlackChatService{*sc},
+	// 	UI:               ui,
+	// 	Debug:            *debug,
+	// 	MaxPoints:        *maxpoints,
+	// 	LeaderboardLimit: *leaderboardlimit,
+	// 	Log:              ll,
+	// 	DB:               db,
+	// 	UserBlacklist:    blacklist,
+	// 	Reactji:          reactjiConfig,
+	// 	Motivate:         *motivate,
+	// 	Aliases:          aliasMap,
+	// 	SelfKarma:        *selfkarma,
+	// 	ReplyType:        *replytype,
+	// })
+
+	//bot.Listen()
+	socketClient.Run()
 }

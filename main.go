@@ -2,18 +2,22 @@ package karmabot
 
 import (
 	"fmt"
-	"reflect"
+	//"reflect"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/kamaln7/karmabot/database"
-	"github.com/kamaln7/karmabot/munge"
+	//"github.com/kamaln7/karmabot/munge"
 	"github.com/kamaln7/karmabot/ui"
-
-	"github.com/aybabtme/log"
 	"github.com/dustin/go-humanize"
-	"github.com/nlopes/slack"
+	"github.com/aybabtme/log"
+	//"github.com/dustin/go-humanize"
+	//"github.com/nlopes/slack"
+	"github.com/slack-go/slack"
+	"github.com/slack-go/slack/socketmode"
+	"github.com/slack-go/slack/slackevents"
+	"github.com/kamaln7/karmabot/munge"
 )
 
 var (
@@ -48,37 +52,65 @@ type Database interface {
 	GetThrowback(user string) (*database.Throwback, error)
 }
 
-// ChatService is an abstraction around Slack, mostly designed for use in tests.
-type ChatService interface {
+type NewChatService interface {
 	// IncomingEventsChan returns a channel of real-time events.
-	IncomingEventsChan() chan slack.RTMEvent
+	IncomingEventsChan() chan socketmode.Event
 
-	// NewOutgoingMessage constructs a new OutgoingMessage using the provided text and channel.
-	NewOutgoingMessage(text string, channel string, options ...slack.RTMsgOption) *slack.OutgoingMessage
+	// Returns Socketmode client
+	GetSocketClient() *socketmode.Client
 
-	// SendMessage sends the provided *OutgoingMessage.
-	SendMessage(msg *slack.OutgoingMessage)
+    // SendMessage sends a message to a Slack channel.
+    SendMessage(channel, text string, options ...slack.MsgOption) (string, string, error)
+
+    // PostEphemeral sends an ephemeral message to a user in a channel.
+    PostEphemeral(channelID, userID string, options ...slack.MsgOption) (string, error)
+
+	// GetUserInfo retrieves the complete user information for the specified username.
+	GetUserInfo(user string) (*slack.User, error)
 
 	// OpenIMChannel opens a new direct-message channel with the specified user.
 	// It returns some status information, and the channel ID.
 	OpenIMChannel(user string) (bool, bool, string, error)
 
-	// GetUserInfo retrieves the complete user information for the specified username.
-	GetUserInfo(user string) (*slack.User, error)
-
-	// PostEphemeral sends an ephemeral message to a user in a channel.
-	PostEphemeral(channelID, userID string, options ...slack.MsgOption) (string, error)
 }
 
 // SlackChatService is an implementation of ChatService using github.com/nlopes/slack.
-type SlackChatService struct {
-	slack.RTM
+// type SlackChatService struct {
+// 	slack.RTM
+// }
+
+// New chat code
+type NewSlackChatService struct {
+	Client  socketmode.Client
+	API    	*slack.Client
 }
 
 // IncomingEventsChan returns a channel of real-time messaging events.
-func (s SlackChatService) IncomingEventsChan() chan slack.RTMEvent {
-	return s.IncomingEvents
+func (s NewSlackChatService) IncomingEventsChan() chan socketmode.Event {
+	return s.Client.Events
 }
+
+// GetSocketClient returns the socket client
+func (s NewSlackChatService) GetSocketClient() *socketmode.Client {
+	return &s.Client
+}
+
+// SendMessage sends a message to a Slack channel.
+func (s NewSlackChatService) SendMessage(channel, text string, options ...slack.MsgOption) (string, string, error) {
+    return s.API.PostMessage(channel, append([]slack.MsgOption{slack.MsgOptionText(text, false)}, options...)...)
+}
+
+
+// PostEphemeral sends an ephemeral message to a user in a channel.
+func (s NewSlackChatService) PostEphemeral(channelID, userID string, options ...slack.MsgOption) (string, error) {
+    return s.API.PostEphemeral(channelID, userID, options...)
+}
+
+// GetUserInfo retrieves the complete user information for the specified username.
+func (s NewSlackChatService) GetUserInfo(user string) (*slack.User, error) {
+    return s.API.GetUserInfo(user)
+}
+
 
 // UserAliases is a map of alias -> main username
 type UserAliases map[string]string
@@ -90,8 +122,33 @@ type ReactjiConfig struct {
 }
 
 // Config contains all the necessary configs for karmabot.
+// type Config struct {
+// 	Slack                       ChatService
+// 	Debug, Motivate, SelfKarma  bool
+// 	MaxPoints, LeaderboardLimit int
+// 	Log                         *log.Log
+// 	UI                          ui.Provider
+// 	DB                          Database
+// 	UserBlacklist               StringList
+// 	Aliases                     UserAliases
+// 	Reactji                     *ReactjiConfig
+// 	ReplyType                   string
+// }
+
+// // A Bot is an instance of karmabot.
+// type Bot struct {
+// 	Config *Config
+// }
+
+// // New returns a pointer to an new instance of karmabot.
+// func New(config *Config) *Bot {
+// 	return &Bot{
+// 		Config: config,
+// 	}
+// }
+
 type Config struct {
-	Slack                       ChatService
+	Slack                       NewChatService
 	Debug, Motivate, SelfKarma  bool
 	MaxPoints, LeaderboardLimit int
 	Log                         *log.Log
@@ -103,205 +160,109 @@ type Config struct {
 	ReplyType                   string
 }
 
-// A Bot is an instance of karmabot.
 type Bot struct {
 	Config *Config
 }
 
-// New returns a pointer to an new instance of karmabot.
-func New(config *Config) *Bot {
+func NewBot(config *Config) *Bot {
 	return &Bot{
 		Config: config,
 	}
 }
-
 // Listen starts listening for Slack messages and calls the
 // appropriate handlers.
-func (b *Bot) Listen() {
-	for msg := range b.Config.Slack.IncomingEventsChan() {
-		switch ev := msg.Data.(type) {
-		case *slack.ReactionAddedEvent:
-			go b.handleReactionAddedEvent(msg.Data.(*slack.ReactionAddedEvent))
-		case *slack.ReactionRemovedEvent:
-			go b.handleReactionRemovedEvent(msg.Data.(*slack.ReactionRemovedEvent))
-		case *slack.MessageEvent:
-			go b.handleMessageEvent(msg.Data.(*slack.MessageEvent))
-		case *slack.ConnectedEvent:
-			b.Config.Log.Info("connected to slack")
+// func (b *Bot) Listen() {
+// 	for msg := range b.Config.Slack.IncomingEventsChan() {
+// 		switch ev := msg.Data.(type) {
+// 		case *slack.ReactionAddedEvent:
+// 			go b.handleReactionAddedEvent(msg.Data.(*slack.ReactionAddedEvent))
+// 		case *slack.ReactionRemovedEvent:
+// 			go b.handleReactionRemovedEvent(msg.Data.(*slack.ReactionRemovedEvent))
+// 		case *slack.MessageEvent:
+// 			go b.handleMessageEvent(msg.Data.(*slack.MessageEvent))
+// 		case *slack.ConnectedEvent:
+// 			b.Config.Log.Info("connected to slack")
 
-			if b.Config.Debug {
-				b.Config.Log.KV("info", ev.Info).Info("got slack info")
-				b.Config.Log.KV("connections", ev.ConnectionCount).Info("got connection count")
+// 			if b.Config.Debug {
+// 				b.Config.Log.KV("info", ev.Info).Info("got slack info")
+// 				b.Config.Log.KV("connections", ev.ConnectionCount).Info("got connection count")
+// 			}
+// 		case *slack.RTMError:
+// 			b.Config.Log.Err(ev).Error("slack rtm error")
+// 		case *slack.InvalidAuthEvent:
+// 			b.Config.Log.Fatal("invalid slack token")
+// 		default:
+// 			b.Config.Log.KV("data", msg.Data).KV("event", reflect.TypeOf(msg.Data)).Info("unexpected slack api event")
+// 		}
+// 	}
+// }
+
+func (b *Bot) Listen(){
+    for msg := range b.Config.Slack.IncomingEventsChan() {
+        fmt.Printf("Event received: %v\n", msg)
+
+		switch msg.Type {
+		case socketmode.EventTypeConnected:
+			fmt.Println("Connected to Slack with Socket Mode.")
+		case socketmode.EventTypeConnectionError:
+			fmt.Println("Connection failed. Retrying later...")
+		case socketmode.EventTypeEventsAPI:
+			eventsAPIEvent, ok := msg.Data.(slackevents.EventsAPIEvent)
+			fmt.Printf("EventsAPIEvent: %v\n", eventsAPIEvent)
+			if !ok {
+				fmt.Printf("Ignored %+v\n", msg)
+
+				continue
 			}
-		case *slack.RTMError:
-			b.Config.Log.Err(ev).Error("slack rtm error")
-		case *slack.InvalidAuthEvent:
-			b.Config.Log.Fatal("invalid slack token")
+
+			fmt.Printf("Event received: %+v\n", eventsAPIEvent)
+
+			//socketClient.Ack(*msg.Request)
+			b.Config.Slack.GetSocketClient().Ack(*msg.Request)
+
+			switch eventsAPIEvent.Type {
+			case slackevents.CallbackEvent:
+				innerEvent := eventsAPIEvent.InnerEvent
+				fmt.Printf("Inner event received: %v\n", innerEvent)
+
+				//Handle slack events
+				switch ev := innerEvent.Data.(type) {
+				case *slackevents.AppMentionEvent:
+					_, _, err := b.Config.Slack.GetSocketClient().PostMessage(ev.Channel, slack.MsgOptionText("Yes, hello.", false))
+					if err != nil {
+						fmt.Printf("failed posting message: %v", err)
+					}
+				//Message event needs to be handled
+				case *slackevents.MessageEvent:
+					fmt.Printf("message %q was sent by user %q", ev.Text, ev.User)
+					go b.handleMessageEvent(ev)
+				case *slackevents.MemberJoinedChannelEvent:
+					fmt.Printf("user %q joined to channel %q", ev.User, ev.Channel)
+				}
+			default:
+				b.Config.Slack.GetSocketClient().Debugf("unsupported Events API event received")
+			}		
 		default:
-			b.Config.Log.KV("data", msg.Data).KV("event", reflect.TypeOf(msg.Data)).Info("unexpected slack api event")
-		}
-	}
+            fmt.Printf("Unhandled event type: %v\n", msg.Type)
+        }
+        // switch evt := msg.Data.(type) {
+		// case socketmode.EventTypeConnecting:
+		// 	fmt.Println("Connecting to Slack with Socket Mode...")
+		// case socketmode.EventTypeConnectionError:
+		// 	fmt.Println("Connection failed. Retrying later...")
+		// case socketmode.EventTypeConnected:
+		// 	fmt.Println("Connected to Slack with Socket Mode.")
+        // // case *slackevents.AppMentionEvent:
+        // //     log.Println("App mention event received")
+        // // case *slackevents.MessageEvent:
+        // //     log.Printf("Message event received: %s\n", evt.Text)
+        // default:
+        //     log.Printf("Unhandled event type: %v\n", msg.Type)
+        // }
+    }
 }
 
-func (b *Bot) getReplyThread(message *slack.MessageEvent) string {
-	var thread string
-
-	switch b.Config.ReplyType {
-	case "message":
-		thread = message.ThreadTimestamp
-	case "thread":
-		if message.ThreadTimestamp != "" {
-			thread = message.ThreadTimestamp
-		} else {
-			thread = message.Timestamp
-		}
-	}
-
-	return thread
-}
-
-// SendReply sends a reply to a message, either as a new message in the channel or a thread (configurable)
-func (b *Bot) SendReply(reply string, message *slack.MessageEvent) {
-	switch b.Config.ReplyType {
-	case "ephemeral":
-		b.SendReplyEphemeral(reply, message)
-	default:
-		b.SendMessage(reply, message.Channel, b.getReplyThread(message))
-	}
-}
-
-// SendReplyEphemeral sends a reply to a message as an ephemeral message to the user
-func (b *Bot) SendReplyEphemeral(reply string, message *slack.MessageEvent) {
-	b.SendMessageEphemeral(message.Channel, message.User, reply, message.ThreadTimestamp)
-}
-
-// SendMessageEphemeral sends an ephemeral message to a user
-func (b *Bot) SendMessageEphemeral(reply, channel, user, thread string) {
-	b.Config.Slack.PostEphemeral(channel, user, slack.MsgOptionText(reply, false), slack.MsgOptionTS(thread))
-}
-
-// SendMessage sends a message to a Slack channel.
-func (b *Bot) SendMessage(message, channel, thread string) {
-	msg := b.Config.Slack.NewOutgoingMessage(message, channel)
-	msg.ThreadTimestamp = thread
-	b.Config.Slack.SendMessage(msg)
-}
-
-// DMUser sends a message directly to a Slack user.
-func (b *Bot) DMUser(message, user string) {
-	_, _, channel, err := b.Config.Slack.OpenIMChannel(user)
-	if err != nil {
-		b.Config.Log.Err(err).KV("user", user).Error("could not open IM channel with user")
-		return
-	}
-
-	b.SendMessage(message, channel, "")
-}
-
-func (b *Bot) handleError(err error, message *slack.MessageEvent) bool {
-	if err == nil {
-		return false
-	}
-
-	b.Config.Log.Err(err).Error("error")
-	if message != nil {
-		var text string
-		if b.Config.Debug {
-			text = err.Error()
-		} else {
-			text = "an error has occurred."
-		}
-
-		b.SendReply(text, message)
-	}
-
-	return true
-}
-
-func (b *Bot) handleReactionAddedEvent(ev *slack.ReactionAddedEvent) {
-	if !b.Config.Reactji.Enabled {
-		return
-	}
-
-	var (
-		points int
-		reason string
-	)
-	switch {
-	case b.Config.Reactji.Upvote.Contains(ev.Reaction):
-		points = +1
-	case b.Config.Reactji.Downvote.Contains(ev.Reaction):
-		points = -1
-	default:
-		return
-	}
-
-	reason = fmt.Sprintf("added a :%s: reactji", ev.Reaction)
-	b.handleReactionEvent(ev, reason, points)
-}
-
-func (b *Bot) handleReactionRemovedEvent(ev *slack.ReactionRemovedEvent) {
-	if !b.Config.Reactji.Enabled {
-		return
-	}
-
-	var (
-		points int
-		reason string
-	)
-	switch {
-	case b.Config.Reactji.Upvote.Contains(ev.Reaction):
-		points = -1
-	case b.Config.Reactji.Downvote.Contains(ev.Reaction):
-		points = +1
-	default:
-		return
-	}
-
-	reason = fmt.Sprintf("removed a :%s: reactji", ev.Reaction)
-	b.handleReactionEvent((*slack.ReactionAddedEvent)(ev), reason, points)
-}
-
-// at this point there is no difference between ReactionAddedEvent and ReactionRemovedEvent
-func (b *Bot) handleReactionEvent(ev *slack.ReactionAddedEvent, reason string, points int) {
-	// look up usernames
-	from, err := b.getUserNameByID(ev.User)
-	if b.handleError(err, nil) {
-		return
-	}
-	to, err := b.getUserNameByID(ev.ItemUser)
-	if b.handleError(err, nil) {
-		return
-	}
-
-	// add the actor's username to the reason
-	reason = fmt.Sprintf("%s %s", from, reason)
-
-	from, to = strings.ToLower(from), strings.ToLower(to)
-
-	// insert points
-	record := &database.Points{
-		From:   from,
-		To:     to,
-		Points: points,
-		Reason: reason,
-	}
-
-	err = b.Config.DB.InsertPoints(record)
-	if b.handleError(err, nil) {
-		return
-	}
-
-	pointsMsg, err := b.getUserPointsMessage(to, reason, points)
-	if b.handleError(err, nil) {
-		return
-	}
-
-	// reply as ephemeral message
-	b.SendMessageEphemeral(pointsMsg, ev.Item.Channel, ev.User, "")
-}
-
-func (b *Bot) handleMessageEvent(ev *slack.MessageEvent) {
+func (b *Bot) handleMessageEvent(ev *slackevents.MessageEvent) {
 	if ev.Type != "message" {
 		return
 	}
@@ -331,7 +292,52 @@ func (b *Bot) handleMessageEvent(ev *slack.MessageEvent) {
 	}
 }
 
-func (b *Bot) printURL(ev *slack.MessageEvent) {
+
+// SendMessage sends a message to a Slack channel.
+func (b *Bot) SendMessage(message, channel, thread string) {
+    _, _, err := b.Config.Slack.SendMessage(channel, message, slack.MsgOptionTS(thread))
+    if err != nil {
+        b.Config.Log.Err(err).Error("failed to send message")
+    }
+}
+// SendReply sends a reply to a message, either as a new message in the channel or a thread (configurable)
+func (b *Bot) SendReply(reply string, message *slackevents.MessageEvent) {
+	switch b.Config.ReplyType {
+	case "ephemeral":
+		b.SendReplyEphemeral(reply, message)
+	default:
+		b.SendMessage(reply, message.Channel, b.getReplyThread(message))
+	}
+}
+
+// SendReplyEphemeral sends a reply to a message as an ephemeral message to the user
+func (b *Bot) SendReplyEphemeral(reply string, message *slackevents.MessageEvent) {
+	b.SendMessageEphemeral(message.Channel, message.User, reply, message.ThreadTimeStamp)
+}
+
+// SendMessageEphemeral sends an ephemeral message to a user
+func (b *Bot) SendMessageEphemeral(reply, channel, user, thread string) {
+	b.Config.Slack.PostEphemeral(channel, user, slack.MsgOptionText(reply, false), slack.MsgOptionTS(thread))
+}
+
+func (b *Bot) getReplyThread(message *slackevents.MessageEvent) string {
+	var thread string
+
+	switch b.Config.ReplyType {
+	case "message":
+		thread = message.ThreadTimeStamp
+	case "thread":
+		if message.ThreadTimeStamp != "" {
+			thread = message.ThreadTimeStamp
+		} else {
+			thread = message.TimeStamp
+		}
+	}
+
+	return thread
+}
+
+func (b *Bot) printURL(ev *slackevents.MessageEvent) {
 	url, err := b.Config.UI.GetURL("/")
 	if b.handleError(err, ev) {
 		return
@@ -345,7 +351,26 @@ func (b *Bot) printURL(ev *slack.MessageEvent) {
 	b.SendReply(url, ev)
 }
 
-func (b *Bot) givePoints(ev *slack.MessageEvent) {
+func (b *Bot) handleError(err error, message *slackevents.MessageEvent) bool {
+	if err == nil {
+		return false
+	}
+
+	b.Config.Log.Err(err).Error("error")
+	if message != nil {
+		var text string
+		if b.Config.Debug {
+			text = err.Error()
+		} else {
+			text = "an error has occurred."
+		}
+
+		b.SendReply(text, message)
+	}
+
+	return true
+}
+func (b *Bot) givePoints(ev *slackevents.MessageEvent) {
 	match := regexps.GiveKarma.FindStringSubmatch(ev.Text)
 	if len(match) == 0 {
 		return
@@ -406,7 +431,7 @@ func (b *Bot) givePoints(ev *slack.MessageEvent) {
 	b.SendReply(pointsMsg, ev)
 }
 
-func (b *Bot) getThrowback(ev *slack.MessageEvent) {
+func (b *Bot) getThrowback(ev *slackevents.MessageEvent) {
 	match := regexps.Throwback.FindStringSubmatch(ev.Text)
 	if len(match) == 0 {
 		return
@@ -448,28 +473,31 @@ func (b *Bot) getThrowback(ev *slack.MessageEvent) {
 	b.SendReply(text, ev)
 }
 
-func (b *Bot) getUserPointsMessage(name, reason string, points int) (string, error) {
+
+func (b *Bot) queryKarma(ev *slackevents.MessageEvent) {
+	match := regexps.QueryKarma.FindStringSubmatch(ev.Text)
+	if len(match) == 0 {
+		return
+	}
+
+	name, err := b.parseUser(match[1])
+	if b.handleError(err, ev) {
+		return
+	}
+	name = strings.ToLower(name)
+
 	user, err := b.Config.DB.GetUser(name)
-	if err != nil {
-		return "", err
+	switch {
+	case err == database.ErrNoSuchUser:
+		// override debug mode
+		b.SendReply(err.Error(), ev)
+	case b.handleError(err, ev):
+	default:
+		b.SendReply(fmt.Sprintf("%s == %d", user.Name, user.Points), ev)
 	}
-
-	text := fmt.Sprintf("%s == %d (", name, user.Points)
-
-	if points > 0 {
-		text += "+"
-	}
-	text = fmt.Sprintf("%s%d", text, points)
-
-	if reason != "" {
-		text += fmt.Sprintf(" for %s", reason)
-	}
-	text += ")"
-
-	return text, nil
 }
 
-func (b *Bot) printLeaderboard(ev *slack.MessageEvent) {
+func (b *Bot) printLeaderboard(ev *slackevents.MessageEvent) {
 	match := regexps.Leaderboard.FindStringSubmatch(ev.Text)
 	if len(match) == 0 {
 		return
@@ -506,6 +534,15 @@ func (b *Bot) printLeaderboard(ev *slack.MessageEvent) {
 	b.SendReply(text, ev)
 }
 
+func (b *Bot) getUserNameByID(id string) (string, error) {
+	userInfo, err := b.Config.Slack.GetUserInfo(id)
+	if err != nil {
+		return "", err
+	}
+
+	return userInfo.Name, nil
+}
+
 func (b *Bot) parseUser(user string) (string, error) {
 	if match := regexps.SlackUser.FindStringSubmatch(user); len(match) > 0 {
 		var err error
@@ -523,34 +560,23 @@ func (b *Bot) parseUser(user string) (string, error) {
 	return user, nil
 }
 
-func (b *Bot) getUserNameByID(id string) (string, error) {
-	userInfo, err := b.Config.Slack.GetUserInfo(id)
+func (b *Bot) getUserPointsMessage(name, reason string, points int) (string, error) {
+	user, err := b.Config.DB.GetUser(name)
 	if err != nil {
 		return "", err
 	}
 
-	return userInfo.Name, nil
-}
+	text := fmt.Sprintf("%s == %d (", name, user.Points)
 
-func (b *Bot) queryKarma(ev *slack.MessageEvent) {
-	match := regexps.QueryKarma.FindStringSubmatch(ev.Text)
-	if len(match) == 0 {
-		return
+	if points > 0 {
+		text += "+"
 	}
+	text = fmt.Sprintf("%s%d", text, points)
 
-	name, err := b.parseUser(match[1])
-	if b.handleError(err, ev) {
-		return
+	if reason != "" {
+		text += fmt.Sprintf(" for %s", reason)
 	}
-	name = strings.ToLower(name)
+	text += ")"
 
-	user, err := b.Config.DB.GetUser(name)
-	switch {
-	case err == database.ErrNoSuchUser:
-		// override debug mode
-		b.SendReply(err.Error(), ev)
-	case b.handleError(err, ev):
-	default:
-		b.SendReply(fmt.Sprintf("%s == %d", user.Name, user.Points), ev)
-	}
+	return text, nil
 }

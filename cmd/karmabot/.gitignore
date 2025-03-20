@@ -1,2 +1,3 @@
 /karmabot
 /db.sqlite3
+.env
