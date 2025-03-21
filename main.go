@@ -2,22 +2,18 @@ package karmabot
 
 import (
 	"fmt"
-	//"reflect"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/kamaln7/karmabot/database"
-	//"github.com/kamaln7/karmabot/munge"
 	"github.com/kamaln7/karmabot/ui"
-	"github.com/dustin/go-humanize"
 	"github.com/aybabtme/log"
-	//"github.com/dustin/go-humanize"
-	//"github.com/nlopes/slack"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/socketmode"
 	"github.com/slack-go/slack/slackevents"
 	"github.com/kamaln7/karmabot/munge"
+	"github.com/dustin/go-humanize"
 )
 
 var (
@@ -52,7 +48,7 @@ type Database interface {
 	GetThrowback(user string) (*database.Throwback, error)
 }
 
-type NewChatService interface {
+type ChatService interface {
 	// IncomingEventsChan returns a channel of real-time events.
 	IncomingEventsChan() chan socketmode.Event
 
@@ -67,50 +63,39 @@ type NewChatService interface {
 
 	// GetUserInfo retrieves the complete user information for the specified username.
 	GetUserInfo(user string) (*slack.User, error)
-
-	// OpenIMChannel opens a new direct-message channel with the specified user.
-	// It returns some status information, and the channel ID.
-	OpenIMChannel(user string) (bool, bool, string, error)
-
 }
 
-// SlackChatService is an implementation of ChatService using github.com/nlopes/slack.
-// type SlackChatService struct {
-// 	slack.RTM
-// }
-
 // New chat code
-type NewSlackChatService struct {
+type SlackChatService struct {
 	Client  socketmode.Client
 	API    	*slack.Client
 }
 
 // IncomingEventsChan returns a channel of real-time messaging events.
-func (s NewSlackChatService) IncomingEventsChan() chan socketmode.Event {
+func (s SlackChatService) IncomingEventsChan() chan socketmode.Event {
 	return s.Client.Events
 }
 
 // GetSocketClient returns the socket client
-func (s NewSlackChatService) GetSocketClient() *socketmode.Client {
+func (s SlackChatService) GetSocketClient() *socketmode.Client {
 	return &s.Client
 }
 
 // SendMessage sends a message to a Slack channel.
-func (s NewSlackChatService) SendMessage(channel, text string, options ...slack.MsgOption) (string, string, error) {
+func (s SlackChatService) SendMessage(channel, text string, options ...slack.MsgOption) (string, string, error) {
     return s.API.PostMessage(channel, append([]slack.MsgOption{slack.MsgOptionText(text, false)}, options...)...)
 }
 
 
 // PostEphemeral sends an ephemeral message to a user in a channel.
-func (s NewSlackChatService) PostEphemeral(channelID, userID string, options ...slack.MsgOption) (string, error) {
+func (s SlackChatService) PostEphemeral(channelID, userID string, options ...slack.MsgOption) (string, error) {
     return s.API.PostEphemeral(channelID, userID, options...)
 }
 
 // GetUserInfo retrieves the complete user information for the specified username.
-func (s NewSlackChatService) GetUserInfo(user string) (*slack.User, error) {
+func (s SlackChatService) GetUserInfo(user string) (*slack.User, error) {
     return s.API.GetUserInfo(user)
 }
-
 
 // UserAliases is a map of alias -> main username
 type UserAliases map[string]string
@@ -121,34 +106,8 @@ type ReactjiConfig struct {
 	Upvote, Downvote StringList
 }
 
-// Config contains all the necessary configs for karmabot.
-// type Config struct {
-// 	Slack                       ChatService
-// 	Debug, Motivate, SelfKarma  bool
-// 	MaxPoints, LeaderboardLimit int
-// 	Log                         *log.Log
-// 	UI                          ui.Provider
-// 	DB                          Database
-// 	UserBlacklist               StringList
-// 	Aliases                     UserAliases
-// 	Reactji                     *ReactjiConfig
-// 	ReplyType                   string
-// }
-
-// // A Bot is an instance of karmabot.
-// type Bot struct {
-// 	Config *Config
-// }
-
-// // New returns a pointer to an new instance of karmabot.
-// func New(config *Config) *Bot {
-// 	return &Bot{
-// 		Config: config,
-// 	}
-// }
-
 type Config struct {
-	Slack                       NewChatService
+	Slack                       ChatService
 	Debug, Motivate, SelfKarma  bool
 	MaxPoints, LeaderboardLimit int
 	Log                         *log.Log
@@ -169,75 +128,46 @@ func NewBot(config *Config) *Bot {
 		Config: config,
 	}
 }
-// Listen starts listening for Slack messages and calls the
-// appropriate handlers.
-// func (b *Bot) Listen() {
-// 	for msg := range b.Config.Slack.IncomingEventsChan() {
-// 		switch ev := msg.Data.(type) {
-// 		case *slack.ReactionAddedEvent:
-// 			go b.handleReactionAddedEvent(msg.Data.(*slack.ReactionAddedEvent))
-// 		case *slack.ReactionRemovedEvent:
-// 			go b.handleReactionRemovedEvent(msg.Data.(*slack.ReactionRemovedEvent))
-// 		case *slack.MessageEvent:
-// 			go b.handleMessageEvent(msg.Data.(*slack.MessageEvent))
-// 		case *slack.ConnectedEvent:
-// 			b.Config.Log.Info("connected to slack")
-
-// 			if b.Config.Debug {
-// 				b.Config.Log.KV("info", ev.Info).Info("got slack info")
-// 				b.Config.Log.KV("connections", ev.ConnectionCount).Info("got connection count")
-// 			}
-// 		case *slack.RTMError:
-// 			b.Config.Log.Err(ev).Error("slack rtm error")
-// 		case *slack.InvalidAuthEvent:
-// 			b.Config.Log.Fatal("invalid slack token")
-// 		default:
-// 			b.Config.Log.KV("data", msg.Data).KV("event", reflect.TypeOf(msg.Data)).Info("unexpected slack api event")
-// 		}
-// 	}
-// }
 
 func (b *Bot) Listen(){
     for msg := range b.Config.Slack.IncomingEventsChan() {
         fmt.Printf("Event received: %v\n", msg)
-
 		switch msg.Type {
 		case socketmode.EventTypeConnected:
-			fmt.Println("Connected to Slack with Socket Mode.")
+			b.Config.Log.Info("Connected to Slack with Socket Mode.")
 		case socketmode.EventTypeConnectionError:
-			fmt.Println("Connection failed. Retrying later...")
+			b.Config.Log.Info("Connection failed. Retrying later....")
 		case socketmode.EventTypeEventsAPI:
 			eventsAPIEvent, ok := msg.Data.(slackevents.EventsAPIEvent)
-			fmt.Printf("EventsAPIEvent: %v\n", eventsAPIEvent)
+			b.Config.Log.KV("EventsAPIEvent", eventsAPIEvent).Info("Inner event received")
 			if !ok {
 				fmt.Printf("Ignored %+v\n", msg)
 
 				continue
 			}
-
-			fmt.Printf("Event received: %+v\n", eventsAPIEvent)
-
-			//socketClient.Ack(*msg.Request)
 			b.Config.Slack.GetSocketClient().Ack(*msg.Request)
 
 			switch eventsAPIEvent.Type {
 			case slackevents.CallbackEvent:
 				innerEvent := eventsAPIEvent.InnerEvent
-				fmt.Printf("Inner event received: %v\n", innerEvent)
-
+                b.Config.Log.KV("info", innerEvent).Info("Inner event received")
 				//Handle slack events
 				switch ev := innerEvent.Data.(type) {
-				case *slackevents.AppMentionEvent:
-					_, _, err := b.Config.Slack.GetSocketClient().PostMessage(ev.Channel, slack.MsgOptionText("Yes, hello.", false))
-					if err != nil {
-						fmt.Printf("failed posting message: %v", err)
-					}
-				//Message event needs to be handled
+				// I do not see a user of AppMentionEvent
+				// case *slackevents.AppMentionEvent:
+				// 	_, _, err := b.Config.Slack.GetSocketClient().PostMessage(ev.Channel, slack.MsgOptionText("Yes, hello.", false))
+				// 	if err != nil {
+				// 		b.Config.Log.Err(err).Error("failed posting message")
+				// 	}
 				case *slackevents.MessageEvent:
-					fmt.Printf("message %q was sent by user %q", ev.Text, ev.User)
+					fmt.Println("==========MESSAGE EVENT==========")
 					go b.handleMessageEvent(ev)
-				case *slackevents.MemberJoinedChannelEvent:
-					fmt.Printf("user %q joined to channel %q", ev.User, ev.Channel)
+				case *slackevents.ReactionAddedEvent:
+					fmt.Printf("reaction %q added to message %q", ev.Reaction, ev.ItemUser)
+					go b.handleReactionAddedEvent(ev)
+				case *slackevents.ReactionRemovedEvent:
+					fmt.Printf("reaction %q removed from message %q", ev.Reaction, ev.ItemUser)
+					go b.handleReactionRemovedEvent(ev)
 				}
 			default:
 				b.Config.Slack.GetSocketClient().Debugf("unsupported Events API event received")
@@ -245,20 +175,6 @@ func (b *Bot) Listen(){
 		default:
             fmt.Printf("Unhandled event type: %v\n", msg.Type)
         }
-        // switch evt := msg.Data.(type) {
-		// case socketmode.EventTypeConnecting:
-		// 	fmt.Println("Connecting to Slack with Socket Mode...")
-		// case socketmode.EventTypeConnectionError:
-		// 	fmt.Println("Connection failed. Retrying later...")
-		// case socketmode.EventTypeConnected:
-		// 	fmt.Println("Connected to Slack with Socket Mode.")
-        // // case *slackevents.AppMentionEvent:
-        // //     log.Println("App mention event received")
-        // // case *slackevents.MessageEvent:
-        // //     log.Printf("Message event received: %s\n", evt.Text)
-        // default:
-        //     log.Printf("Unhandled event type: %v\n", msg.Type)
-        // }
     }
 }
 
@@ -579,4 +495,88 @@ func (b *Bot) getUserPointsMessage(name, reason string, points int) (string, err
 	text += ")"
 
 	return text, nil
+}
+
+func (b *Bot) handleReactionAddedEvent(ev *slackevents.ReactionAddedEvent) {
+	if !b.Config.Reactji.Enabled {
+		return
+	}
+
+	var (
+		points int
+		reason string
+	)
+	switch {
+	case b.Config.Reactji.Upvote.Contains(ev.Reaction):
+		points = +1
+	case b.Config.Reactji.Downvote.Contains(ev.Reaction):
+		points = -1
+	default:
+		return
+	}
+
+	reason = fmt.Sprintf("added a :%s: reactji", ev.Reaction)
+	fmt.Printf("points %d, reason %s\n", points, reason)
+	b.handleReactionEvent(ev, reason, points)
+}
+
+func (b *Bot) handleReactionRemovedEvent(ev *slackevents.ReactionRemovedEvent) {
+	if !b.Config.Reactji.Enabled {
+		return
+	}
+
+	var (
+		points int
+		reason string
+	)
+	switch {
+	case b.Config.Reactji.Upvote.Contains(ev.Reaction):
+		points = -1
+	case b.Config.Reactji.Downvote.Contains(ev.Reaction):
+		points = +1
+	default:
+		return
+	}
+
+	reason = fmt.Sprintf("removed a :%s: reactji", ev.Reaction)
+	b.handleReactionEvent((*slackevents.ReactionAddedEvent)(ev), reason, points)
+}
+
+// at this point there is no difference between ReactionAddedEvent and ReactionRemovedEvent
+func (b *Bot) handleReactionEvent(ev *slackevents.ReactionAddedEvent, reason string, points int) {
+	// look up usernames
+	from, err := b.getUserNameByID(ev.User)
+	if b.handleError(err, nil) {
+		return
+	}
+	to, err := b.getUserNameByID(ev.ItemUser)
+	if b.handleError(err, nil) {
+		return
+	}
+
+	// add the actor's username to the reason
+	reason = fmt.Sprintf("%s %s", from, reason)
+
+	from, to = strings.ToLower(from), strings.ToLower(to)
+
+	// insert points
+	record := &database.Points{
+		From:   from,
+		To:     to,
+		Points: points,
+		Reason: reason,
+	}
+
+	err = b.Config.DB.InsertPoints(record)
+	if b.handleError(err, nil) {
+		return
+	}
+
+	pointsMsg, err := b.getUserPointsMessage(to, reason, points)
+	if b.handleError(err, nil) {
+		return
+	}
+
+	// reply as ephemeral message
+	b.SendMessageEphemeral(pointsMsg, ev.Item.Channel, ev.User, "")
 }

@@ -9,21 +9,20 @@ import (
 	karmabotui "github.com/kamaln7/karmabot/ui"
 	"github.com/kamaln7/karmabot/ui/blankui"
 	"github.com/kamaln7/karmabot/ui/webui"
-	//"log"
 	"github.com/aybabtme/log"
 	"github.com/kamaln7/envy"
-	//"github.com/nlopes/slack"
 
-	"github.com/joho/godotenv"
+	_ "github.com/joho/godotenv"
     "github.com/slack-go/slack"
-    //"github.com/slack-go/slack/slackevents"
     "github.com/slack-go/slack/socketmode"
-	"os"
+	//"os"
+	"fmt"
 )
 
 // cli flags
 var (
-	token            = flag.String("token", "", "slack RTM token")
+	bottoken         = flag.String("bottoken", "", "Bot token")
+	apptoken         = flag.String("apptoken", "", "App token")
 	dbpath           = flag.String("db", "./db.sqlite3", "path to sqlite database")
 	maxpoints        = flag.Int("maxpoints", 6, "the maximum amount of points that users can give/take at once")
 	leaderboardlimit = flag.Int("leaderboardlimit", 10, "the default amount of users to list in the leaderboard")
@@ -40,6 +39,7 @@ var (
 	aliases          = make(karmabot.StringList, 0)
 	selfkarma        = flag.Bool("selfkarma", true, "allow users to add/remove karma to themselves")
 	replytype        = flag.String("replytype", "message", "how to reply to commands (message, thread)")
+	socketdebug	     = flag.Bool("socketdebug", true, "set socketmode debug mode")
 )
 
 func main() {
@@ -103,35 +103,28 @@ func main() {
 		ll.KV("path", *dbpath).Err(err).Fatal("could not open sqlite db")
 	}
 
-	// slack
-
-	// if *token == "" {
-	// 	ll.Fatal("please pass the slack RTM token (see `karmabot -h` for help)")
-	// }
-
-	//TODO: figure out a way to fix this
-	//our current logging library does not implement
-	//log.Logger
-	//slack.SetLogger(*ll)
-	// sc := slack.New(*token, slack.OptionDebug(*debug)).NewRTM()
-	// go sc.ManageConnection()
-
-	// karmabot
-
 	// Adding new code here
-    godotenv.Load(".env")
+    // godotenv.Load(".env")
  
-    token := os.Getenv("SLACK_AUTH_TOKEN")
-    appToken := os.Getenv("SLACK_APP_TOKEN")
+    // token := os.Getenv("SLACK_AUTH_TOKEN")
+    // appToken := os.Getenv("SLACK_APP_TOKEN")
+	fmt.Println("bottoken: ", *bottoken)
+	fmt.Println("apptoken: ", *apptoken)
+	
+	if *bottoken == "" {
+		ll.Fatal("please pass the slack Bot token (see `karmabot -h` for help")
+	}
+
+	if *apptoken == "" {
+		ll.Fatal("please pass the slack App token (see `karmabot -h` for help")
+	}
  
-    client := slack.New(token, slack.OptionDebug(true), slack.OptionAppLevelToken(appToken))
+    client := slack.New(*bottoken, slack.OptionDebug(*socketdebug), slack.OptionAppLevelToken(*apptoken))
  
     socketClient := socketmode.New(
         client,
-        socketmode.OptionDebug(true),
-   //     socketmode.OptionLog(log.New(os.Stdout, "socketmode: ", log.Lshortfile|log.LstdFlags)),
-    )
- 
+        socketmode.OptionDebug(*socketdebug),
+	)
 
 	var ui karmabotui.Provider
 	if *webuipath != "" && *webuilistenaddr != "" {
@@ -155,7 +148,7 @@ func main() {
 	go ui.Listen()
 
 	bot := karmabot.NewBot(&karmabot.Config{
-		Slack: &karmabot.NewSlackChatService{
+		Slack: &karmabot.SlackChatService{
 			Client: *socketClient,
 			API: client,
 		},
@@ -175,22 +168,5 @@ func main() {
 
 	go bot.Listen()
 
-	// bot := karmabot.New(&karmabot.Config{
-	// 	Slack:            &karmabot.SlackChatService{*sc},
-	// 	UI:               ui,
-	// 	Debug:            *debug,
-	// 	MaxPoints:        *maxpoints,
-	// 	LeaderboardLimit: *leaderboardlimit,
-	// 	Log:              ll,
-	// 	DB:               db,
-	// 	UserBlacklist:    blacklist,
-	// 	Reactji:          reactjiConfig,
-	// 	Motivate:         *motivate,
-	// 	Aliases:          aliasMap,
-	// 	SelfKarma:        *selfkarma,
-	// 	ReplyType:        *replytype,
-	// })
-
-	//bot.Listen()
 	socketClient.Run()
 }
