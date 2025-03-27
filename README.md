@@ -1,4 +1,4 @@
-![karmabot logo](/logo.png)  
+![karmabot logo](/logo.png)
 
 [![Build Status](https://semaphoreci.com/api/v1/kamaln7/karmabot/branches/master/badge.svg)](https://semaphoreci.com/kamaln7/karmabot)
 
@@ -44,9 +44,9 @@ karmabot is a Slack bot that listens for and performs karma operations (aka upvo
 
 ### Use the Docker images
 
-* `kamaln7/karmabot:latest`
-* `kamaln7/karmabot:latest-webui`
-* `kamaln7/karmabotctl:latest`
+- `kamaln7/karmabot:latest`
+- `kamaln7/karmabot:latest-webui`
+- `kamaln7/karmabotctl:latest`
 
 ### Download a Pre-built Release
 
@@ -55,15 +55,11 @@ karmabot is a Slack bot that listens for and performs karma operations (aka upvo
 ### Build from Source
 
 1. clone the repo (find the latest version number in [the releases page](https://github.com/kamaln7/karmabot/releases)):
-    1. `git clone -b v1.5.2 https://github.com/kamaln7/karmabot.git`
-    2. `cd karmabot`
+   1. `git clone -b v1.5.2 https://github.com/kamaln7/karmabot.git`
+   2. `cd karmabot`
 2. install dependencies
-    1. run `go mod download`
-3. run `go build` in `/cmd/karmabot` and `/cmd/karmabotctl`
-    2. `cd cmd/karmabot`
-    3. `go build`
-    4. `cd ../karmabotctl`
-    5. `go build`
+   1. run `go mod download`
+3. run `go build` in `/cmd/karmabot` and `/cmd/karmabotctl` 2. `cd cmd/karmabot` 3. `go build` 4. `cd ../karmabotctl` 5. `go build`
 
 ## Usage
 
@@ -71,26 +67,26 @@ karmabot is a Slack bot that listens for and performs karma operations (aka upvo
 2. invite `karmabot` to any existing channels and all future channels (this is a limitation of Slack's bot API, unfortunately)
 3. run `karmabot`. the following options are supported. you can use environment variables as well, but any CLI options you pass will take precedence.
 
-
-| option                      | required? | description                                                  | default                          | env var                |
-| --------------------------- | --------- | ------------------------------------------------------------ | -------------------------------- | ---------------------- |
-| `-token string`             | **yes**   | slack RTM token                                              |                                  | `KB_TOKEN`             |
-| `-debug=bool`               | no        | set debug mode                                               | `false`                          | `KB_DEBUG`             |
-| `-db string`                | no        | path to sqlite database                                      | `./db.sqlite3`                   | `KB_DB`                |
-| `-leaderboardlimit int`     | no        | the default amount of users to list in the leaderboard       | `10`                             | `KB_LEADERBOARDLIMIT`  |
-| `-maxpoints int`            | no        | the maximum amount of points that users can give/take at once | `6`                              | `KB_MAXPOINTS`         |
-| `-motivate=bool`            | no        | toggle [motivate.im](http://motivate.im/) support            | `true`                           | `KB_MOTIVATE`          |
-| `-blacklist string`         | no        | **may be passed multiple times** blacklist `string`  i.e. ignore karma commands for `string` | `[]`                             | `KB_BLACKLIST`         |
-| `-reactji bool`             | no        | use reactji (👍 and 👎) as reaction events                     | `true`                           | `KB_REACTJI`           |
-| `-reactjis.upvote string`   | no        | **may be passed multiple times** a list of reactjis to use for upvotes. for emojis with aliases, use the first name that is shown in the emoji popup | `+1`, `thumbsup`, `thumbsup_all` | `KB_REACTJIS_UPVOTE`   |
+| option                      | required? | description                                                                                                                                            | default                          | env var                |
+| --------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------- | ---------------------- |
+| `-bottoken string`          | **yes**   | slack Bot User OAuth Token                                                                                                                             |                                  | `BOT_TOKEN`            |
+| `-apptoken string`          | **yes**   | slack App-Level Tokens                                                                                                                                 |                                  | `APP_TOKEN`            |
+| `-debug=bool`               | no        | set debug mode                                                                                                                                         | `false`                          | `KB_DEBUG`             |
+| `-db string`                | no        | path to sqlite database                                                                                                                                | `./db.sqlite3`                   | `KB_DB`                |
+| `-leaderboardlimit int`     | no        | the default amount of users to list in the leaderboard                                                                                                 | `10`                             | `KB_LEADERBOARDLIMIT`  |
+| `-maxpoints int`            | no        | the maximum amount of points that users can give/take at once                                                                                          | `6`                              | `KB_MAXPOINTS`         |
+| `-motivate=bool`            | no        | toggle [motivate.im](http://motivate.im/) support                                                                                                      | `true`                           | `KB_MOTIVATE`          |
+| `-blacklist string`         | no        | **may be passed multiple times** blacklist `string` i.e. ignore karma commands for `string`                                                            | `[]`                             | `KB_BLACKLIST`         |
+| `-reactji bool`             | no        | use reactji (👍 and 👎) as reaction events                                                                                                             | `true`                           | `KB_REACTJI`           |
+| `-reactjis.upvote string`   | no        | **may be passed multiple times** a list of reactjis to use for upvotes. for emojis with aliases, use the first name that is shown in the emoji popup   | `+1`, `thumbsup`, `thumbsup_all` | `KB_REACTJIS_UPVOTE`   |
 | `-reactjis.downvote string` | no        | **may be passed multiple times** a list of reactjis to use for downvotes. for emojis with aliases, use the first name that is shown in the emoji popup | `-1`, `thumbsdown`               | `KB_REACTJIS_DOWNVOTE` |
-| `-alias string`             | no        | **may be passed multiple times** alias different users to one user. syntax: `-alias main++alias1++alias2++...++aliasN` |                                  | `KB_ALIAS`             |
-| `-selfkarma bool`           | no       | allow users to add/remove karma to themselves                | `true`                           | `KB_SELFKARMA`         |
-| `-replytype string`           | no       | whether to reply in channel (`message`), in a new thread under the user's message (`thread`), or only visible to the acting user (`ephemeral`)                | `message`                           | `KB_REPLYTYPE`         |
+| `-alias string`             | no        | **may be passed multiple times** alias different users to one user. syntax: `-alias main++alias1++alias2++...++aliasN`                                 |                                  | `KB_ALIAS`             |
+| `-selfkarma bool`           | no        | allow users to add/remove karma to themselves                                                                                                          | `true`                           | `KB_SELFKARMA`         |
+| `-replytype string`         | no        | whether to reply in channel (`message`), in a new thread under the user's message (`thread`), or only visible to the acting user (`ephemeral`)         | `message`                        | `KB_REPLYTYPE`         |
 
 In addition, see the table below for the options related to the web UI.
 
-**example:** `./karmabot -token xoxb-abcdefg`
+**example:** `./karmabot --apptoken xapp-1-abcdfreds --bottoken xoxb-acerfggv`
 
 It is recommended to pass karmabot's logs through [humanlog](https://github.com/aybabtme/humanlog). humanlog will format and color the JSON output as nice easy-to-read text.
 
@@ -109,13 +105,12 @@ karmabot includes an optional web UI. The web UI uses TOTP tokens for authentica
 
 Once you have performed the steps detailed above, pass the necessary options to the `karmabot` binary. You can use environment variables as well, but any CLI options you pass will take precedence.
 
-| option                     | required? | description                                                  | default                               | env var               |
-| -------------------------- | --------- | ------------------------------------------------------------ | ------------------------------------- | --------------------- |
-| `-webui.listenaddr string` | **yes**   | the address (`host:port`) on which to serve the web UI       |                                       | `KB_WEBUI_LISTENADDR` |
-| `-webui.totp string`       | **yes**   | the TOTP key (see above)                                     |                                       | `KB_WEBUI_TOTP`       |
-| `-webui.path string`       | **yes**   | path to the `www` directory (see above)                      |                                       | `KB_WEBUI_PATH`       |
+| option                     | required? | description                                                                                     | default                               | env var               |
+| -------------------------- | --------- | ----------------------------------------------------------------------------------------------- | ------------------------------------- | --------------------- |
+| `-webui.listenaddr string` | **yes**   | the address (`host:port`) on which to serve the web UI                                          |                                       | `KB_WEBUI_LISTENADDR` |
+| `-webui.totp string`       | **yes**   | the TOTP key (see above)                                                                        |                                       | `KB_WEBUI_TOTP`       |
+| `-webui.path string`       | **yes**   | path to the `www` directory (see above)                                                         |                                       | `KB_WEBUI_PATH`       |
 | `-webui.url string`        | no        | the URL which karmabot should use to generate links to the web UI (_without_ a trailing slash!) | defaults to `http://webui.listenaddr` | `KB_WEBUI_URL`        |
-
 
 If done correctly, the web UI should be accessible on the `webui.listenaddr` that you have configured. The web UI will not be started if either of `webui.listenaddr` or `webui.path` are missing.
 
@@ -145,10 +140,10 @@ A list of all arguments for each command can be printed by running `karmabotctl 
 
 #### webui
 
-| command | arguments                                | description                              |
-| ------- | ---------------------------------------- | ---------------------------------------- |
-| serve   | `<debug> <leaderboardlimit> <totp> <path> <listenaddr> <url>` | start a webserver                        |
-| totp    | `<totp>`                                 | generate a TOTP token based on the passed secret |
+| command | arguments                                                     | description                                      |
+| ------- | ------------------------------------------------------------- | ------------------------------------------------ |
+| serve   | `<debug> <leaderboardlimit> <totp> <path> <listenaddr> <url>` | start a webserver                                |
+| totp    | `<totp>`                                                      | generate a TOTP token based on the passed secret |
 
 ## License
 
