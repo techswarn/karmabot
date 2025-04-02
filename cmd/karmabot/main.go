@@ -33,7 +33,7 @@ var (
 	webuiurl         = flag.String("webui.url", "", "url address for accessing the web ui")
 	motivate         = flag.Bool("motivate", true, "toggle motivate.im support")
 	blacklist        = make(karmabot.StringList, 0)
-	reactji          = flag.Bool("reactji", true, "use reactji as karma operations")
+	reactji          = flag.Bool("reactji", false, "use reactji as karma operations")
 	upvotereactji    = make(karmabot.StringList, 0)
 	downvotereactji  = make(karmabot.StringList, 0)
 	aliases          = make(karmabot.StringList, 0)
