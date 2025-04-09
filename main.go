@@ -153,12 +153,6 @@ func (b *Bot) Listen(){
                 b.Config.Log.KV("info", innerEvent).Info("Inner event received")
 				//Handle slack events
 				switch ev := innerEvent.Data.(type) {
-				// I do not see a user of AppMentionEvent
-				// case *slackevents.AppMentionEvent:
-				// 	_, _, err := b.Config.Slack.GetSocketClient().PostMessage(ev.Channel, slack.MsgOptionText("Yes, hello.", false))
-				// 	if err != nil {
-				// 		b.Config.Log.Err(err).Error("failed posting message")
-				// 	}
 				case *slackevents.MessageEvent:
 					fmt.Println("==========MESSAGE EVENT==========")
 					go b.handleMessageEvent(ev)
