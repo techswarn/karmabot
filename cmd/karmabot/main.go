@@ -108,8 +108,8 @@ func main() {
  
     // token := os.Getenv("SLACK_AUTH_TOKEN")
     // appToken := os.Getenv("SLACK_APP_TOKEN")
-	fmt.Println("bottoken: ", *bottoken)
-	fmt.Println("apptoken: ", *apptoken)
+	//fmt.Println("bottoken: ", *bottoken)
+	//fmt.Println("apptoken: ", *apptoken)
 	
 	if *bottoken == "" {
 		ll.Fatal("please pass the slack Bot token (see `karmabot -h` for help")
