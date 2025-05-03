@@ -15,7 +15,7 @@ import (
 	_ "github.com/joho/godotenv"
     "github.com/slack-go/slack"
     "github.com/slack-go/slack/socketmode"
-	//"os"
+	"os"
 	"fmt"
 )
 
@@ -104,22 +104,22 @@ func main() {
 	}
 
 	// Adding new code here
-    // godotenv.Load(".env")
- 
-    // token := os.Getenv("SLACK_AUTH_TOKEN")
-    // appToken := os.Getenv("SLACK_APP_TOKEN")
-	//fmt.Println("bottoken: ", *bottoken)
-	//fmt.Println("apptoken: ", *apptoken)
+    //godotenv.Load(".env")
+   
+    bottoken := os.Getenv("BOT_TOKEN")
+    apptoken := os.Getenv("APP_TOKEN")
+	fmt.Println("bottoken: ", bottoken)
+	fmt.Println("apptoken: ", apptoken)
 	
-	if *bottoken == "" {
-		ll.Fatal("please pass the slack Bot token (see `karmabot -h` for help")
+	if bottoken == "" {
+		ll.Fatal("please pass the slack Bot token (see `karmabot -h` for help or set environment variables BOT_TOKEN")
 	}
 
-	if *apptoken == "" {
-		ll.Fatal("please pass the slack App token (see `karmabot -h` for help")
+	if apptoken == "" {
+		ll.Fatal("please pass the slack App token (see `karmabot -h` for help or set environment variables APP_TOKEN")
 	}
  
-    client := slack.New(*bottoken, slack.OptionDebug(*socketdebug), slack.OptionAppLevelToken(*apptoken))
+    client := slack.New(bottoken, slack.OptionDebug(*socketdebug), slack.OptionAppLevelToken(apptoken))
  
     socketClient := socketmode.New(
         client,
